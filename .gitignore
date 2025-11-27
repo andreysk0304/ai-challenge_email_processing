@@ -394,11 +394,4 @@ cython_debug/
 
 # Android studio 3.1+ serialized cache file
 
-
-shell.log
-.history
-.trash/*
-.trash
-.undo_history.jsonl
-test-dir/*
-test-dir
+test.py
