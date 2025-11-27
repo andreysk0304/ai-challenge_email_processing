@@ -1,4 +1,5 @@
 import chromadb
+import json
 
 from app.core.documents import CATEGORY_DOCUMENTS
 from app.llm.client import client
@@ -74,12 +75,12 @@ class CategoryClassificator:
         return f'Классифицируй текст:\n"{user_text}"'
 
 
-    async def classify(self, text: str) -> str:
+    def classify(self, text: str) -> dict:
         retrieved = self.retrieve_examples(text)
         system_prompt = self.build_system_prompt(text, retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-5-nano",
             temperature=0.0,
             max_tokens=256,
@@ -89,4 +90,11 @@ class CategoryClassificator:
             ]
         )
 
-        return response.choices[0].message.content.strip()
+        raw = response.choices[0].message.content.strip()
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError(f"Model returned invalid JSON:\n{raw}")
+
+        return data
