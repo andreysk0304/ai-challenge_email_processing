@@ -12,4 +12,4 @@ celery_app.conf.update(
     broker_transport_options={"visibility_timeout": 3600},
 )
 
-from app import tasks
+celery_app.autodiscover_tasks(['app'])
