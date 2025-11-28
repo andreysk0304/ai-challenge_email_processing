@@ -8,7 +8,7 @@ async def main() -> None:
     formality = FormalityClassificator()
     category = CategoryClassificator()
 
-    text =       "На основании п. 4.2 Указания Банка России №55-У от 10.04.2024 просим представить информацию о сделках с признаками возможного отмывания денежных средств за III квартал 2025 года до 25.11.2025 включительно."
+    text = "Требуется подтверждение действия для заказа №123457\nДля завершения операции изменения e-mail в вашем личном кабинете required подтверждение.\nКод подтверждения: 294817\nНикому не сообщайте этот код."
 
 
     formality = formality.classify(text=text)
@@ -22,4 +22,7 @@ async def main() -> None:
 
 
 if __name__ == '__main__':
+    import os
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
     asyncio.run(main())
