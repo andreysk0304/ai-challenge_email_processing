@@ -1,6 +1,8 @@
 import chromadb
 import json
 
+from chromadb import QueryResult
+
 from app.utils.config import FOLDER_ID
 
 from app.constants import DOCUMENTS_JSON
