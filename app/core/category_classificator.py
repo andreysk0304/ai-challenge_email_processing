@@ -1,11 +1,10 @@
+import chromadb
 import json
 
-import chromadb
-from chromadb import QueryResult
-
-from app.constants import DOCUMENTS_JSON
-from app.llm.client import client
 from app.utils.config import FOLDER_ID
+
+from app.core.documents import CATEGORY_DOCUMENTS
+from app.llm.client import client
 
 
 class CategoryClassificator:
@@ -15,35 +14,32 @@ class CategoryClassificator:
 
         self.collection = self._init_vector_collection()
 
-    @staticmethod
-    def _init_vector_collection():
+
+    def _init_vector_collection(self):
         chroma = chromadb.Client()
 
         collection = chroma.create_collection(
             name="category_classifier_examples",
             embedding_function=None
         )
-        formalities_examples = None
-        with open(DOCUMENTS_JSON) as f:
-            formalities_examples = json.load(f)['category']
-        for i, (label, texts) in enumerate(formalities_examples.items()):
-            for text in texts:
-                collection.add(
-                    ids=[str(i)],
-                    documents=[text],
-                    metadatas=[{"label": label}]
-                )
+
+        for i, (label, text) in enumerate(CATEGORY_DOCUMENTS):
+            collection.add(
+                ids=[str(i)],
+                documents=[text],
+                metadatas=[{"label": label}]
+            )
 
         return collection
 
-    def retrieve_examples(self, text: str) -> QueryResult:
+
+    def retrieve_examples(self, text: str) -> dict:
         return self.collection.query(
             query_texts=[text],
             n_results=3
         )
 
-    @staticmethod
-    def build_system_prompt(user_text: str, retrieved: dict) -> str:
+    def build_system_prompt(self, user_text: str, retrieved: dict) -> str:
         examples_text = ""
         for doc, meta in zip(retrieved["documents"][0], retrieved["metadatas"][0]):
             examples_text += f"Категория: {meta['label']}\nПример: {doc}\n\n"
@@ -76,8 +72,8 @@ class CategoryClassificator:
 
         return system_prompt.strip()
 
-    @staticmethod
-    def build_user_prompt(user_text: str) -> str:
+
+    def build_user_prompt(self, user_text: str) -> str:
         return f'Классифицируй текст:\n"{user_text}"'
 
 
@@ -86,13 +82,17 @@ class CategoryClassificator:
         system_prompt = self.build_system_prompt(text, retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.responses.create(
-            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
-            instructions=system_prompt,
-            input=user_prompt
+        response = self.client.chat.completions.create(
+            model="yandexgpt",
+            temperature=0.0,
+            max_tokens=256,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
         )
 
-        raw = response.output_text.strip().replace('```', '')
+        raw = response.choices[0].message.content.strip()
 
         try:
             data = json.loads(raw)

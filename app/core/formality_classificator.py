@@ -24,8 +24,9 @@ class FormalityClassificator:
             embedding_function=None
         )
         formalities_examples = None
-        with open(DOCUMENTS_JSON) as f:
+        with open(DOCUMENTS_JSON, encoding="utf-8") as f:
             formalities_examples = json.load(f)['formality']
+
         for i, (label, texts) in enumerate(formalities_examples.items()):
             for text in texts:
                 collection.add(
