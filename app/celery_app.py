@@ -11,3 +11,5 @@ celery_app.conf.update(
     task_acks_late=True,
     broker_transport_options={"visibility_timeout": 3600},
 )
+
+from app import tasks
