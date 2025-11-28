@@ -11,7 +11,7 @@ class Emails(Base):
     __tablename__ = "emails"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    message_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    message_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     thread_id: Mapped[str] = mapped_column(String(255), index=True, nullable=True)
 
     from_email: Mapped[str] = mapped_column(String(320), index=True, nullable=False)
