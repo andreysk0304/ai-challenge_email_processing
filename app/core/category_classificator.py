@@ -14,8 +14,8 @@ class CategoryClassificator:
 
         self.collection = self._init_vector_collection()
 
-
-    def _init_vector_collection(self):
+    @staticmethod
+    def _init_vector_collection():
         chroma = chromadb.Client()
 
         collection = chroma.create_collection(
@@ -37,13 +37,14 @@ class CategoryClassificator:
 
         return collection
 
-    def retrieve_examples(self, text: str) -> dict:
+
+    def retrieve_examples(self, text: str) -> QueryResult:
         return self.collection.query(
             query_texts=[text],
             n_results=3
         )
 
-    def build_system_prompt(self, retrieved: dict) -> str:
+    def build_system_prompt(self, user_text: str, retrieved: dict) -> str:
         examples_text = ""
         for doc, meta in zip(retrieved["documents"][0], retrieved["metadatas"][0]):
             examples_text += f"Категория: {meta['label']}\nПример: {doc}\n\n"

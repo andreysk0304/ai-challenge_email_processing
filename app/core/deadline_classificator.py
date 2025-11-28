@@ -1,5 +1,9 @@
 import json
 
+import chromadb
+from chromadb import QueryResult
+
+from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
 from datetime import datetime
 
