@@ -6,9 +6,13 @@ import asyncio
 from app.core.category_classificator import CategoryClassificator
 from app.core.deadline_classificator import DeadlineClassificator
 from app.core.formality_classificator import FormalityClassificator
+from app.llm.client import client
 
 
 async def main() -> None:
+    models = client.models.list()
+    print(models.data)
+
     formality = FormalityClassificator()
     category = CategoryClassificator()
     deadline = DeadlineClassificator()

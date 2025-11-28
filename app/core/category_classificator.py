@@ -3,7 +3,7 @@ import json
 
 from app.utils.config import FOLDER_ID
 
-from app.core.documents import CATEGORY_DOCUMENTS
+from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
 
 
@@ -23,15 +23,19 @@ class CategoryClassificator:
             embedding_function=None
         )
 
-        for i, (label, text) in enumerate(CATEGORY_DOCUMENTS):
-            collection.add(
-                ids=[str(i)],
-                documents=[text],
-                metadatas=[{"label": label}]
-            )
+        formalities_examples = None
+        with open(DOCUMENTS_JSON, encoding="utf-8") as f:
+            formalities_examples = json.load(f)['category']
+
+        for i, (label, texts) in enumerate(formalities_examples.items()):
+            for text in texts:
+                collection.add(
+                    ids=[str(i)],
+                    documents=[text],
+                    metadatas=[{"label": label}]
+                )
 
         return collection
-
 
     def retrieve_examples(self, text: str) -> dict:
         return self.collection.query(
@@ -39,7 +43,7 @@ class CategoryClassificator:
             n_results=3
         )
 
-    def build_system_prompt(self, user_text: str, retrieved: dict) -> str:
+    def build_system_prompt(self, retrieved: dict) -> str:
         examples_text = ""
         for doc, meta in zip(retrieved["documents"][0], retrieved["metadatas"][0]):
             examples_text += f"Категория: {meta['label']}\nПример: {doc}\n\n"
@@ -72,27 +76,22 @@ class CategoryClassificator:
 
         return system_prompt.strip()
 
-
     def build_user_prompt(self, user_text: str) -> str:
         return f'Классифицируй текст:\n"{user_text}"'
 
-
     def classify(self, text: str) -> dict:
         retrieved = self.retrieve_examples(text)
-        system_prompt = self.build_system_prompt(text, retrieved)
+        system_prompt = self.build_system_prompt(retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.chat.completions.create(
-            model="yandexgpt",
-            temperature=0.0,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+        response = self.client.responses.create(
+            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
+            instructions=system_prompt,
+            input=user_prompt,
+            temperature=0.0
         )
 
-        raw = response.choices[0].message.content.strip()
+        raw = response.output_text.strip().replace('```', '')
 
         try:
             data = json.loads(raw)

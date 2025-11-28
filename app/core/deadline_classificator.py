@@ -65,7 +65,8 @@ class DeadlineClassificator:
         response = self.client.responses.create(
             model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
             instructions=system_prompt,
-            input=user_prompt
+            input=user_prompt,
+            temperature=0.0
         )
         raw = response.output_text.strip().replace('```', '')
 
@@ -75,3 +76,5 @@ class DeadlineClassificator:
             raise ValueError(f"Model returned invalid JSON:\n{raw}")
 
         return data
+
+

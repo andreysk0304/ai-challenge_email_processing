@@ -25,3 +25,5 @@ def classify_email_task(payload: dict):
         email.reason = category['reason']
 
         session.commit()
+
+        #TODO нужно больше логики

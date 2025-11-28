@@ -15,8 +15,7 @@ class FormalityClassificator:
 
         self.collection = self._init_vector_collection()
 
-    @staticmethod
-    def _init_vector_collection():
+    def _init_vector_collection(self):
         chroma = chromadb.Client()
 
         collection = chroma.create_collection(
@@ -87,7 +86,8 @@ class FormalityClassificator:
         response = self.client.responses.create(
             model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
             instructions=system_prompt,
-            input=user_prompt
+            input=user_prompt,
+            temperature=0.0
         )
         raw = response.output_text.strip().replace('```', '')
 

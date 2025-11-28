@@ -25,7 +25,7 @@ class Emails(Base):
     category: Mapped[str] = mapped_column(String(128), nullable=True)
     reason: Mapped[str] = mapped_column(String(1024), nullable=True)
 
-    deadline_time: Mapped[datetime] = mapped_column(DateTime(), nullable=True)
+    deadline_date: Mapped[datetime] = mapped_column(DateTime(), nullable=True)
 
     formality: Mapped[str] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=msk_now)
