@@ -5,8 +5,11 @@ from app.core.category_classificator import CategoryClassificator
 
 from sqlalchemy import select
 
+from app.core.formality_classificator import FormalityClassificator
 
 category_classifier = CategoryClassificator()
+formality_classifier = FormalityClassificator()
+
 
 @celery_app.task(name="classify_email", max_retries=3)
 def classify_email_task(payload: dict):
@@ -14,7 +17,7 @@ def classify_email_task(payload: dict):
 
     with session_maker() as session:
         email = session.execute(select(Emails).where(Emails.id == email_id))
-        email  = email.scalars().first()
+        email = email.scalars().first()
 
         category: dict = category_classifier.classify(text=email.subject)
 
@@ -22,3 +25,5 @@ def classify_email_task(payload: dict):
         email.reason = category['reason']
 
         session.commit()
+
+
