@@ -1,148 +1,80 @@
-import chromadb
 import json
 
-from app.core.documents import DEADLINE_DOCUMENTS
 from app.llm.client import client
 from datetime import datetime
 
+from app.utils.config import FOLDER_ID
 
-class DeadlineCategory:
+
+class DeadlineClassificator:
     def __init__(self):
         self.client = client
-        self.collection = self._init_vector_collection()
 
-    def _init_vector_collection(self):
-        chroma = chromadb.Client()
-
-        collection = chroma.create_collection(
-            name='deadline_classifier_examples',
-            embedding_function=None
-        )
-
-        for i, (label, text) in enumerate(DEADLINE_DOCUMENTS):
-            collection.add(
-                ids=[str(i)],
-                documents=[text],
-                metadatas=[{'label': label}]
-            )
-
-        return collection
-
-    def retrieve_examples(self, text: str) -> dict:
-        return self.collection.query(
-            query_texts=[text],
-            n_results=3
-        )
-
-    def build_system_prompt(self, retrieved: dict, category: str, letter_date: str) -> str:
+    def build_system_prompt(self) -> str:
         date_now = datetime.now()
         formatted_date = datetime.strftime(date_now, '%d.%m.%Y')
-        examples_text = ''
-        for doc, meta in zip(retrieved['documents'][0], retrieved['metadatas'][0]):
-            examples_text += f"Тип дедлайна: {meta['label']}\nТекст: {doc}\n\n"
 
         system_prompt = f"""
-            Ты — классификатор срочности ответа на корпоративные письма банка.
+        Ты — классификатор срочности и дедлайнов в корпоративных письмах банка.
+        Твоя задача: определить ДЕДЛАЙН ответа на письмо, если он указан в тексте.
 
-            ВАЖНО: Учитывай РАЗНИЦУ между датой письма и сегодняшним днём!
+        ТРЕБУЕМАЯ ЛОГИКА:
 
-            ВХОДНЫЕ ДАННЫЕ:
-            - ДАТА ПОЛУЧЕНИЯ ПИСЬМА: {letter_date}
-            - СЕГОДНЯШНЯЯ ДАТА: {formatted_date}
-            - КАТЕГОРИЯ ПИСЬМА: {category}
+        1. АНАЛИЗ ДАТ:
+           - Даты после слова "от" — ИГНОРИРУЙ (это даты документа)
+           - Даты после слова "до" — ЭТО ДЕДЛАЙН, его нужно вернуть
+           - Если встречаются формулировки типа:
+               "в течение 3 дней", "до конца недели", "24 часа" —
+               рассчитай дату дедлайна относительно СЕГОДНЯ.
+           - СЕГОДНЯ: {formatted_date}
 
-            КАТЕГОРИИ ПИСЕМ (для понимания контекста):
-            • information_request - запрос информации/документов
-            • complaint - жалоба или претензия (ВСЕГДА СРОЧНО!)
-            • regular_request - регуляторный запрос (ВСЕГДА СРОЧНО!)  
-            • partner_offer - партнёрское предложение (обычно не срочно)
-            • request_for_approval - запрос на согласование
-            • notification - уведомление (ОТВЕТ НЕ ТРЕБУЕТСЯ)
+        2. ЕСЛИ В ТЕКСТЕ НЕ УКАЗАН НИКАКОЙ ДЕДЛАЙН:
+           - Вернуть {{'deadline': None}}
 
-            КАТЕГОРИИ СРОЧНОСТИ ОТВЕТА:
-            - urgent: ответ в течение 1-2 дней (дедлайн просрочен или осталось меньше 3 дней)
-            - high: ответ в течение 3-7 дней (3-7 дней до дедлайна)  
-            - medium: ответ в течение 8-14 дней (8-14 дней до дедлайна)
-            - low: ответ более чем через 15 дней (больше 14 дней до дедлайна)
-            - no_deadline: дедлайн не указан (только для уведомлений)
+        3. ЕСЛИ ДЕДЛАЙН УКАЗАН:
+           - Вернуть дату в формате YYYY-MM-DD
 
-            КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:
+        4. ИГНОРИРУЙ всё, что не относится к срокам ответа:
+           - даты документов
+           - даты договоров
+           - даты прошлой переписки
 
-            1. РАСЧЁТ ОТНОСИТЕЛЬНО СЕГОДНЯШНЕЙ ДАТЫ {formatted_date}:
-               • ВСЕ расчёты делай относительно СЕГОДНЯШНЕЙ даты: {formatted_date}
-               • Если письмо пришло {letter_date}, а сегодня {formatted_date} - учитывай эту разницу!
-               • Если дедлайн уже прошёл относительно {formatted_date} → urgent
-               • Если до дедлайна осталось мало времени → повышай срочность
+        5. Правила интерпретации:
+           - "в течение X дней" → дедлайн = сегодня + X дней
+           - "до конца недели" → воскресенье текущей недели
+           - "немедленно", "оперативно", "24 часа" → дедлайн = сегодня + 1 день
+           - "до понедельника", "до вторника" → ближайшая указанная неделядата
+           - "срочно", "ASAP" → дедлайн = сегодня + 1 день, если не указано иначе
 
-            2. АНАЛИЗ РЕАЛЬНЫХ СРОКОВ:
-               • Письмо пришло {letter_date}, сегодня {formatted_date}
-               • Если в письме указано "ответить до 20.12.2025":
-                 - От {letter_date} до 20.12.2025 = X дней (оригинальный срок)
-                 - От {formatted_date} до 20.12.2025 = Y дней (реальный остаток)
-                 - Используй Y для определения срочности!
-
-            3. ПРИМЕРЫ РАСЧЁТА:
-               • Письмо от 10.12.2025: "ответить до 20.12.2025"
-                 - Сегодня 18.12.2025 → до дедлайна 2 дня → urgent
-               • Письмо от 01.12.2025: "ответить в течение 10 дней" 
-                 - Дедлайн = 11.12.2025
-                 - Сегодня 18.12.2025 → дедлайн ПРОШЁЛ 7 дней назад → urgent
-               • Письмо от 15.11.2025: "ответить до 25.12.2025"
-                 - Сегодня 18.12.2025 → до дедлайна 7 дней → high
-
-            4. УЧЁТ КАТЕГОРИИ:
-               • ЖАЛОБЫ и РЕГУЛЯТОРНЫЕ ЗАПРОСЫ → всегда высокий приоритет
-               • Если дедлайн не указан, но это ЖАЛОБА → high
-               • УВЕДОМЛЕНИЯ → no_deadline (если нет явного дедлайна)
-
-            5. КЛЮЧЕВЫЕ СЛОВА:
-               • "немедленно", "срочно", "24 часа", "сегодня" → urgent
-               • "3 дня", "до конца недели", "требуем" → high
-               • "7 дней", "неделя" → medium  
-               • "месяц", "когда удобно" → low
-               • "уведомляем", "информируем" → no_deadline
-
-            ПРИМЕРЫ ИЗ БАЗЫ ЗНАНИЙ:
-            {examples_text}
-
-            ТРЕБОВАНИЯ К ОТВЕТУ:
-            — Строго в JSON-формате: {{
-              "deadline": "...", 
-              "reason": "...", 
-              "deadline_date": "DD.MM.YYYY или null",
-              "days_remaining": X
-            }}
-            — deadline: ТОЛЬКО ОДНО значение из списка категорий выше
-            — reason: объяснение с расчётом дней от СЕГОДНЯШНЕЙ даты {formatted_date}
-            — deadline_date: конкретная дата дедлайна (если можно определить), иначе null
-            — days_remaining: сколько дней осталось до дедлайна ОТ СЕГОДНЯ (если есть дедлайн), иначе null
-
-            ЗАПРЕЩЕНО:
-            — Добавлять любые комментарии вне JSON
-            — Использовать категории не из списка
-
-            ВАЖНО: Всегда указывай в reason расчёт от СЕГОДНЯШНЕЙ даты!
-            Пример: "Дедлайн 25.12.2025, от {formatted_date} осталось 7 дней → high"
+        ТРЕБОВАНИЯ К ФОРМАТУ ОТВЕТА:
+        — Строго JSON:
+            {{'deadline': '<YYYY-MM-DD или None>'}}
+        — Никаких комментариев вне JSON.
+        — Не придумывай даты, если их нет.
         """
 
         return system_prompt.strip()
 
     def build_user_prompt(self, user_text: str) -> str:
-        return f'Определи степень срочности ответа на письмо и напиши дату дедлайна:\n "{user_text}"'
+        return f'Определи, как срочно нужно ответить на следующее сообщение:\n "{user_text}"'
 
-    def classify(self, text: str, category: str, letter_date: str) -> str:
-        retrieved = self.retrieve_examples(text)
-        system_prompt = self.build_system_prompt(retrieved, category, letter_date)
+    def classify(self, text: str):
+        system_prompt = self.build_system_prompt()
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.chat.completions.create(
-            model="gpt-5-nano",
-            temperature=0.0,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+        response = self.client.responses.create(
+            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
+            instructions=system_prompt,
+            input=user_prompt,
+            temperature=0.0
         )
+        raw = response.output_text.strip().replace('```', '')
 
-        return response.choices[0].message.content.strip()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError(f"Model returned invalid JSON:\n{raw}")
+
+        return data
+
+

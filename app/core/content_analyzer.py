@@ -1,58 +1,14 @@
 import chromadb
 import json
-from app.core.documents import ANALYZER_DOCUMENTS
 from app.llm.client import client
 
 
 class ContentAnalyzer:
     def __init__(self):
         self.client = client
-        self.collection = self._init_vector_collection()
 
     @staticmethod
-    def _init_vector_collection():
-        chroma = chromadb.Client()
-
-        collection = chroma.create_collection(
-            name="analyzer_examples",
-            embedding_function=None
-        )
-
-        for i, (analysis, text) in enumerate(ANALYZER_DOCUMENTS):
-            collection.add(
-                ids=[str(i)],
-                documents=[text],
-                metadatas=[{"analysis": json.dumps(analysis, ensure_ascii=False)}]
-            )
-
-        return collection
-
-    def retrieve_examples(self, text: str) -> list:
-        results = self.collection.query(
-            query_texts=[text],
-            n_results=3
-        )
-
-        examples = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            analysis = json.loads(meta["analysis"])
-            examples.append({
-                "text": doc,
-                "analysis": analysis
-            })
-
-        return examples
-
-    @staticmethod
-    def build_system_prompt(category: str, formality_level: str, examples: list) -> str:
-        examples_text = ""
-        for i, example in enumerate(examples, 1):
-            examples_text += f"""
-            ПРИМЕР {i}:
-            ТЕКСТ: {example['text']}
-            АНАЛИЗ: {json.dumps(example['analysis'], ensure_ascii=False, indent=2)}
-            """
-
+    def build_system_prompt(category: str, formality_level: str) -> str:
         return f"""
             Ты — анализатор корпоративных писем в банковской сфере.
 
@@ -110,11 +66,8 @@ class ContentAnalyzer:
                - Пример: [{{"type": "Указание Банка России", "value": "№55-У от 10.04.2024"}}]
                - Если ссылок нет → пустой массив []
                
-            ПРИМЕРЫ ДЛЯ ОБУЧЕНИЯ
-            {examples_text}
 
             КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА
-
             ОБЯЗАТЕЛЬНО:
             - Возвращай ТОЛЬКО JSON без каких-либо комментариев
             - Используй только информацию из текста письма
@@ -155,9 +108,7 @@ class ContentAnalyzer:
         return f"ПРОАНАЛИЗИРУЙ ПИСЬМО:\n\n{text}"
 
     def analyze_letter(self, text: str, category: str, formality_level: str) -> dict:
-        examples = self.retrieve_examples(text)
-
-        system_prompt = self.build_system_prompt(category=category, formality_level=formality_level, examples=examples)
+        system_prompt = self.build_system_prompt(category=category, formality_level=formality_level)
         user_prompt = self.build_user_prompt(text=text)
 
         response = self.client.chat.completions.create(
