@@ -1,3 +1,6 @@
+from app.core.category_classificator import CategoryClassificator
+
+import json
 import asyncio
 
 from app.core.category_classificator import CategoryClassificator
