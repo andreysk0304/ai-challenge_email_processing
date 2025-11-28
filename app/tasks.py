@@ -17,7 +17,7 @@ def classify_email_task(payload: dict):
 
     with session_maker() as session:
         email = session.execute(select(Emails).where(Emails.id == email_id))
-        email = email.scalars().first()
+        email  = email.scalars().first()
 
         category: dict = category_classifier.classify(text=email.subject)
 
@@ -25,5 +25,3 @@ def classify_email_task(payload: dict):
         email.reason = category['reason']
 
         session.commit()
-
-

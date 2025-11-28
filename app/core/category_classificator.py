@@ -79,19 +79,16 @@ class CategoryClassificator:
     def build_user_prompt(user_text: str) -> str:
         return f'Классифицируй текст:\n"{user_text}"'
 
+
     def classify(self, text: str) -> dict:
         retrieved = self.retrieve_examples(text)
         system_prompt = self.build_system_prompt(text, retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.chat.completions.create(
-            model="gpt-5-nano",
-            temperature=0.0,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+        response = self.client.responses.create(
+            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
+            instructions=system_prompt,
+            input=user_prompt
         )
 
         raw = response.choices[0].message.content.strip()
