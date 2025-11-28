@@ -396,3 +396,4 @@ cython_debug/
 
 test.py
 test_deadlines.py
+test_analyzator.py

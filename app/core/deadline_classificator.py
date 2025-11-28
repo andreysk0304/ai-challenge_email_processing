@@ -146,6 +146,3 @@ class DeadlineCategory:
         )
 
         return response.choices[0].message.content.strip()
-
-
-# TODO Классификатор дедлайнов ( побалуйся с промптами, чтобы оно в тексте и доках искало, когда надо овтетить на это письмо ) ( Артём ), погляди примерно структуру кода в category_classificator, клиент апи опенаи юзай из from app.llm.client import client
