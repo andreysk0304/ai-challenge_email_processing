@@ -7,44 +7,16 @@ from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
 from datetime import datetime
 
+from app.utils.config import FOLDER_ID
+
 
 class DeadlineClassificator:
     def __init__(self):
         self.client = client
-        self.collection = self._init_vector_collection()
 
-    def _init_vector_collection(self):
-        chroma = chromadb.Client()
-
-        collection = chroma.create_collection(
-            name='deadline_classifier_examples',
-            embedding_function=None
-        )
-        deadlines_examples = None
-        with open(DOCUMENTS_JSON) as f:
-            deadlines_examples = json.load(f)['formality'].items()
-        for i, (label, texts) in enumerate(deadlines_examples):
-            for text in texts:
-                collection.add(
-                    ids=[str(i)],
-                    documents=[text],
-                    metadatas=[{'label': label}]
-                )
-
-        return collection
-
-    def retrieve_examples(self, text: str) -> QueryResult:
-        return self.collection.query(
-            query_texts=[text],
-            n_results=3
-        )
-
-    def build_system_prompt(self, retrieved: dict) -> str:
+    def build_system_prompt(self) -> str:
         date_now = datetime.now()
         formatted_date = datetime.strftime(date_now, '%d.%m.%Y')
-        examples_text = ''
-        for doc, meta in zip(retrieved['documents'][0], retrieved['metadatas'][0]):
-            examples_text += f"Тип дедлайна: {meta['label']}\nТекст: {doc}\n\n"
 
         system_prompt = f"""
                 Ты — классификатор срочности ответа на корпоративные письма банка.
@@ -68,13 +40,6 @@ class DeadlineClassificator:
                    - Даты после предлога "до" — ЭТО ДЕДЛАЙНЫ ОТВЕТА
                    - Пример: "от 10.04.2024... до 25.11.2025" → анализируем только "до 25.11.2025"
 
-                2. ОЦЕНКА СРОЧНОСТИ ПО ДАТАМ (например, относительно 10.12.2025):
-                   - Дедлайн ДО 15.12.2025 → urgent (менее 5 дней)
-                   - Дедлайн ДО 20.12.2025 → high (5-10 дней)  
-                   - Дедлайн ДО 30.12.2025 → medium (10-20 дней)
-                   - Дедлайн ПОСЛЕ 30.12.2025 → low (более 20 дней)
-                   - Дедлайн ПРОШЁЛ → urgent (просрочено)
-
                 3. АНАЛИЗ КЛЮЧЕВЫХ СЛОВ:
                    - "немедленно", "срочно", "24 часа", "сегодня" → urgent
                    - "в течение 3 дней", "до конца недели", "требуем" → high
@@ -86,10 +51,6 @@ class DeadlineClassificator:
                    - Жалобы (complaint) обычно срочнее чем запросы информации
                    - Регуляторные запросы имеют высокий приоритет
                    - Партнёрские предложения обычно не срочные
-
-                    
-                ПРИМЕРЫ ИЗ БАЗЫ ЗНАНИЙ ДЛЯ ОБУЧЕНИЯ:
-                {examples_text}
 
                 ТРЕБОВАНИЯ К ОТВЕТУ:
                 — Строго в JSON-формате: {{"deadline": "...", "reason": "..."}}
@@ -113,16 +74,12 @@ class DeadlineClassificator:
         system_prompt = self.build_system_prompt(retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.chat.completions.create(
-            model="gpt-5-nano",
-            temperature=0.0,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+        response = self.client.responses.create(
+            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
+            instructions=system_prompt,
+            input=user_prompt
         )
-        raw = response.choices[0].message.content.strip()
+        raw = response.output_text.strip().replace('```', '')
 
         try:
             data = json.loads(raw)

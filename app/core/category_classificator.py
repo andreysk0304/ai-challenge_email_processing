@@ -5,6 +5,7 @@ from chromadb import QueryResult
 
 from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
+from app.utils.config import FOLDER_ID
 
 
 class CategoryClassificator:
@@ -91,7 +92,7 @@ class CategoryClassificator:
             input=user_prompt
         )
 
-        raw = response.choices[0].message.content.strip()
+        raw = response.output_text.strip().replace('```', '')
 
         try:
             data = json.loads(raw)

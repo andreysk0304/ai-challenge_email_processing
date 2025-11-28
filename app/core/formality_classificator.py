@@ -5,6 +5,7 @@ from chromadb import QueryResult
 
 from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
+from app.utils.config import FOLDER_ID
 
 
 class FormalityClassificator:
@@ -82,17 +83,12 @@ class FormalityClassificator:
         system_prompt = self.build_system_prompt(text, retrieved)
         user_prompt = self.build_user_prompt(text)
 
-        response = self.client.chat.completions.create(
-            model="gpt-5-nano",
-            temperature=0.0,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+        response = self.client.responses.create(
+            model=f"gpt://{FOLDER_ID}/yandexgpt/latest",
+            instructions=system_prompt,
+            input=user_prompt
         )
-
-        raw = response.choices[0].message.content.strip()
+        raw = response.output_text.strip().replace('```', '')
 
         try:
             data = json.loads(raw)
