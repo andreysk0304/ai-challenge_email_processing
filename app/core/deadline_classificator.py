@@ -1,11 +1,14 @@
-import chromadb
+import json
 
-from app.core.documents import DEADLINE_DOCUMENTS
+import chromadb
+from chromadb import QueryResult
+
+from app.constants import DOCUMENTS_JSON
 from app.llm.client import client
 from datetime import datetime
 
 
-class DeadlineCategory:
+class DeadlineClassificator:
     def __init__(self):
         self.client = client
         self.collection = self._init_vector_collection()
@@ -17,17 +20,20 @@ class DeadlineCategory:
             name='deadline_classifier_examples',
             embedding_function=None
         )
-
-        for i, (label, text) in enumerate(DEADLINE_DOCUMENTS):
-            collection.add(
-                ids=[str(i)],
-                documents=[text],
-                metadatas=[{'label': label}]
-            )
+        deadlines_examples = None
+        with open(DOCUMENTS_JSON) as f:
+            deadlines_examples = json.load(f)['formality'].items()
+        for i, (label, texts) in enumerate(deadlines_examples):
+            for text in texts:
+                collection.add(
+                    ids=[str(i)],
+                    documents=[text],
+                    metadatas=[{'label': label}]
+                )
 
         return collection
 
-    def retrieve_examples(self, text: str) -> dict:
+    def retrieve_examples(self, text: str) -> QueryResult:
         return self.collection.query(
             query_texts=[text],
             n_results=3
@@ -102,7 +108,7 @@ class DeadlineCategory:
     def build_user_prompt(self, user_text: str) -> str:
         return f'Определи, как срочно нужно ответить на следующее сообщение:\n "{user_text}"'
 
-    def classify(self, text: str) -> str:
+    def classify(self, text: str):
         retrieved = self.retrieve_examples(text)
         system_prompt = self.build_system_prompt(retrieved)
         user_prompt = self.build_user_prompt(text)
@@ -116,8 +122,11 @@ class DeadlineCategory:
                 {"role": "user", "content": user_prompt}
             ]
         )
+        raw = response.choices[0].message.content.strip()
 
-        return response.choices[0].message.content.strip()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError(f"Model returned invalid JSON:\n{raw}")
 
-
-# TODO Классификатор дедлайнов ( побалуйся с промптами, чтобы оно в тексте и доках искало, когда надо овтетить на это письмо ) ( Артём ), погляди примерно структуру кода в category_classificator, клиент апи опенаи юзай из from app.llm.client import client
+        return data
